@@ -14,7 +14,23 @@ export const clean=(html)=>sanitizeHtml(String(html),{allowedTags:[...sanitizeHt
 const textOf=html=>sanitizeHtml(html.replace(/<\/(p|h[1-6]|li|blockquote|tr)>/g,'\n'),{allowedTags:[],allowedAttributes:{}}).replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim();
 const escape=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 export async function start({root=path.join(here,'data'),port=Number(process.env.PORT||4317),seed=true,open=false}={}){
- fs.mkdirSync(root,{recursive:true});const lock=path.join(root,'server.lock');if(fs.existsSync(lock)){try{const pid=Number(fs.readFileSync(lock,'utf8'));process.kill(pid,0);throw Error('Кабинет уже запущен. Откройте существующее окно или закройте его консоль.')}catch(e){if(e.code!=='ESRCH')throw e;fs.unlinkSync(lock)}}fs.writeFileSync(lock,String(process.pid),{flag:'wx'});
+ fs.mkdirSync(root,{recursive:true});const lock=path.join(root,'server.lock');
+ if(fs.existsSync(lock)){
+  const pid=Number(fs.readFileSync(lock,'utf8'));if(!Number.isSafeInteger(pid)||pid<=0)throw Error('Некорректный файл блокировки. Не удаляйте данные; проверьте запущенные процессы.');
+  let alive=true;try{process.kill(pid,0)}catch(e){if(e.code!=='ESRCH')throw e;alive=false}
+  if(alive){
+   const address='http://127.0.0.1:'+port;let existing;
+   try{const response=await fetch(address+'/api/state',{signal:AbortSignal.timeout(2500)});if(response.ok)existing=await response.json()}catch{}
+   if(existing&&path.resolve(existing.root)===path.resolve(root,'current')){
+    console.log('Кабинет уже работает. Откройте: '+address+'\nЕсли вы обновляли программу, сначала сохраните текст, затем запустите RESTART.bat.');
+    if(open&&process.platform==='win32')spawn('cmd',['/c','start','',address],{stdio:'ignore'});
+    return {alreadyRunning:true,address,close:async()=>{}};
+   }
+   throw Error('Найден запущенный процесс, но кабинет не отвечает по ожидаемому адресу. Закройте прежнюю консоль приложения. Не удаляйте папку data.');
+  }
+  fs.unlinkSync(lock);
+ }
+ fs.writeFileSync(lock,String(process.pid),{flag:'wx'});
  let store;try{store=new Store(root)}catch(e){fs.unlinkSync(lock);throw e}let importing=false;
  const asset=(bytes,ext)=>{const name=crypto.randomUUID()+'.'+ext;fs.writeFileSync(path.join(store.current,'assets',name),bytes,{flag:'wx'});return '/assets/'+name};
  async function importDocx(bytes,title,split=true){const result=await mammoth.convertToHtml({buffer:bytes},{includeEmbeddedStyleMap:false,includeDefaultStyleMap:true,convertImage:mammoth.images.imgElement(async image=>{const ext={'image/png':'png','image/jpeg':'jpg','image/gif':'gif','image/webp':'webp'}[image.contentType];if(!ext)return {src:''};return {src:asset(await image.read(),ext)}})});let html=clean(result.value);let parts=split?html.split(/(?=<h1\b)/i):[html];parts=parts.filter(x=>textOf(x).trim());if(!parts.length)throw Error('В документе не найден текст');return parts.map((part,index)=>{const heading=part.match(/^<h1[^>]*>([\s\S]*?)<\/h1>/i);return store.create({title:heading?textOf(heading[1]):parts.length===1?title:title+' · '+(index+1),kind:'глава',html:part,plain:textOf(part)})})}

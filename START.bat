@@ -12,7 +12,11 @@ if errorlevel 1 (
  pause
  exit /b 1
 )
-if not exist "node_modules\sql.js\dist\sql-wasm.wasm" (
+set "AUTHOR_NEED_INSTALL="
+if not exist "node_modules\sql.js\dist\sql-wasm.wasm" set "AUTHOR_NEED_INSTALL=1"
+node -e "try {require.resolve('docx/html');require.resolve('htmlparser2')} catch {process.exit(1)}"
+if errorlevel 1 set "AUTHOR_NEED_INSTALL=1"
+if defined AUTHOR_NEED_INSTALL (
  echo Восстановление зависимостей. Для этого шага нужен интернет.
  call npm ci --omit=dev --no-audit --no-fund
  if errorlevel 1 (
