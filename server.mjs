@@ -9,6 +9,7 @@ import sanitizeHtml from 'sanitize-html';
 import {zipSync} from 'fflate';
 import {Store} from './store.mjs';
 import {selectDocuments,exportPublication} from './publication.mjs';
+import {numberChapters,chapterLabel} from './composition.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
 export const clean=(html)=>sanitizeHtml(String(html),{allowedTags:[...sanitizeHtml.defaults.allowedTags,'img','s','u','mark','sub','sup','span','h1','h2','h3'],allowedAttributes:{'*':['style'],a:['href','name','target','rel'],img:['src','alt','width','height'],td:['colspan','rowspan'],th:['colspan','rowspan']},allowedStyles:{'*':{'color':[/^#[0-9a-f]{3,8}$/i,/^rgb\([\d\s,]+\)$/],'background-color':[/^#[0-9a-f]{3,8}$/i,/^rgb\([\d\s,]+\)$/],'text-align':[/^(left|right|center|justify)$/]}},allowedSchemes:['http','https','mailto'],transformTags:{a:(tag,attrs)=>({tagName:'a',attribs:{...attrs,target:'_blank',rel:'noopener noreferrer'}}),img:(tag,attrs)=>({tagName:'img',attribs:{...attrs,src:/^\/assets\/[a-f0-9-]+\.(png|jpg|jpeg|gif|webp)$/.test(attrs.src||'')?attrs.src:''}})}});
 const textOf=html=>sanitizeHtml(html.replace(/<\/(p|h[1-6]|li|blockquote|tr)>/g,'\n'),{allowedTags:[],allowedAttributes:{}}).replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim();
@@ -44,6 +45,7 @@ export async function start({root=path.join(here,'data'),port=Number(process.env
  if(route==='/api/search'&&req.method==='GET'){const q='%'+(url.searchParams.get('q')||'')+'%';const term=(url.searchParams.get('q')||'').toLocaleLowerCase('ru');return send(store.rows('SELECT id,title,plain,notes,examples FROM documents').filter(d=>[d.title,d.plain,d.notes,d.examples].some(v=>v.toLocaleLowerCase('ru').includes(term))).map(d=>d.id))}
  if(route==='/api/title'&&req.method==='PUT'){const d=await json();if(typeof d.title!=='string'||!d.title.trim())throw Error('Укажите название книги');store.transaction(()=>store.db.run('INSERT OR REPLACE INTO settings VALUES (?,?)',['bookTitle',d.title.slice(0,200)]));return send(info())}
  if(route==='/api/documents'&&req.method==='POST'){const d=await json();return send(store.create({title:String(d.title||'Новый раздел').slice(0,300),kind:['глава','заметка','план','источник'].includes(d.kind)?d.kind:'глава'}),201)}
+ if(route==='/api/documents/order'&&req.method==='PUT'){const d=await json();return send({documents:store.reorder(d.ids,d.expectedOrder)})}
  const doc=route.match(/^\/api\/documents\/([a-f0-9-]+)$/);if(doc){const id=doc[1];if(req.method==='GET'){const d=store.get(id);return send(d||{error:'Раздел не найден'},d?200:404)}if(req.method==='PUT'){const d=await json();if(typeof d.title!=='string'||!d.title.trim()||typeof d.html!=='string'||!Array.isArray(d.tasks)||d.tasks.some(t=>typeof t.text!=='string'||typeof t.done!=='boolean')||!Array.isArray(d.checks)||d.checks.length!==5||d.checks.some(x=>typeof x!=='boolean')||!['черновик','на правке','готово'].includes(d.status)||!['глава','заметка','план','источник'].includes(d.kind)||typeof d.notes!=='string'||typeof d.examples!=='string')throw Error('Неверные данные документа');d.html=clean(d.html);d.plain=textOf(d.html);return send(store.save(id,d))}}
  const version=route.match(/^\/api\/documents\/([a-f0-9-]+)\/versions$/);if(version){if(req.method==='GET')return send(store.versions(version[1]));if(req.method==='POST'){const d=await json();return send(store.version(version[1],String(d.label||'Авторская версия').slice(0,200)))}}
  const restore=route.match(/^\/api\/documents\/([a-f0-9-]+)\/restore$/);if(restore&&req.method==='POST'){const d=await json();return send(store.restoreVersion(restore[1],d.versionId))}
@@ -53,8 +55,8 @@ export async function start({root=path.join(here,'data'),port=Number(process.env
  if(route==='/api/restore'&&req.method==='POST'){const bytes=await read(100*1024*1024);return send({previousBackup:store.restore(bytes),...info()})}
  if(route==='/api/export/publication'&&req.method==='POST'){
   const options=await json();const all=store.rows('SELECT * FROM documents ORDER BY position');
-  const selected=selectDocuments(all,options).map(d=>({...d,html:clean(d.html)}));
-  const title=options.scope==='book'?info().bookTitle:selected.length===1?selected[0].title:info().bookTitle+' · выбранные разделы';
+  const selected=selectDocuments(numberChapters(all),options).map(d=>({...d,html:clean(d.html)}));
+  const title=options.scope==='book'?info().bookTitle:selected.length===1?chapterLabel(selected[0]):info().bookTitle+' · выбранные разделы';
   const exported=await exportPublication({documents:selected,title,format:options.format,assetsDirectory:path.join(store.current,'assets'),includeBookTitle:options.scope==='book'});
   res.writeHead(200,{'Content-Type':exported.type,'Content-Disposition':"attachment; filename=\"author-cabinet."+options.format+"\"; filename*=UTF-8''"+encodeURIComponent(exported.filename),'Cache-Control':'no-store'});res.end(exported.bytes);return;
  }

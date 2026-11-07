@@ -32,6 +32,13 @@ export class Store {
  persist(){const tmp=path.join(this.current,'database.sqlite.tmp');const fd=fs.openSync(tmp,'w');try{fs.writeFileSync(fd,this.db.export());fs.fsyncSync(fd)}finally{fs.closeSync(fd)}fs.renameSync(tmp,path.join(this.current,'database.sqlite'))}
  transaction(fn){const before=this.db.export();try{this.db.run('BEGIN');const result=fn();this.db.run('COMMIT');this.persist();return result}catch(error){this.db.close();this.db=new SQL.Database(before);throw error}}
  list(){return this.rows('SELECT id,title,kind,status,position,updated,revision,length(plain) AS characters FROM documents ORDER BY position')}
+ reorder(ids,expectedOrder){
+  const current=this.list().map(d=>d.id);
+  if(!Array.isArray(ids)||ids.some(id=>typeof id!=='string')||ids.length!==current.length||new Set(ids).size!==current.length||ids.some(id=>!current.includes(id)))throw Object.assign(Error('Нужно передать каждый материал ровно один раз'),{status:400});
+  if(!Array.isArray(expectedOrder)||expectedOrder.length!==current.length||expectedOrder.some((id,i)=>id!==current[i]))throw Object.assign(Error('Оглавление изменилось в другой вкладке. Список обновлён; повторите перенос.'),{status:409});
+  if(ids.every((id,i)=>id===current[i]))return this.list();
+  return this.transaction(()=>{ids.forEach((id,index)=>this.db.run('UPDATE documents SET position=? WHERE id=?',[index+1,id]));return this.list()});
+ }
  get(id){const d=this.rows('SELECT * FROM documents WHERE id=?',[id])[0];if(!d)return null;d.tasks=JSON.parse(d.tasks);d.checks=JSON.parse(d.checks);return d}
  create({title='Новый раздел',kind='глава',html='',plain=''}){return this.transaction(()=>{const id=crypto.randomUUID();const pos=Number(this.rows('SELECT coalesce(max(position),0)+1 AS n FROM documents')[0].n);this.db.run('INSERT INTO documents(id,title,kind,html,plain,position,updated) VALUES (?,?,?,?,?,?,?)',[id,title,kind,html,plain,pos,new Date().toISOString()]);return this.get(id)})}
  save(id,d){

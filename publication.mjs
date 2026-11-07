@@ -3,6 +3,7 @@ import path from 'node:path';
 import {parseDocument,DomUtils} from 'htmlparser2';
 import {Document,Packer} from 'docx';
 import {htmlToContent} from 'docx/html';
+import {chapterTitle,chapterLabel} from './composition.mjs';
 const escape=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 const mime={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',webp:'image/webp'};
 const stylesheet='body{max-width:850px;margin:40px auto;padding:0 24px;font:18px/1.7 Georgia,serif;color:#172333;background:white}h1{font-size:1.6em}h2{font-size:1.4em}h3{font-size:1.2em}h4{font-size:1.1em}h1,h2,h3,h4{line-height:1.4;break-after:avoid}p{margin:0 0 1em}img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%;margin:1em 0}td,th{border:1px solid #7185a0;padding:8px;vertical-align:top}th{background:#e6eefb}blockquote{border-left:4px solid #2563eb;padding:12px 20px;margin:1em 0;background:#edf3ff}a{color:#164dc7}section{margin-top:2.5em}.book-title{font-size:2em}';
@@ -14,9 +15,16 @@ export function selectDocuments(documents,{scope,ids}={}){
 }
 function withTitle(document){
  const dom=parseDocument(document.html||'');const first=dom.children.find(n=>n.type!=='comment'&&(n.type!=='text'||n.data.trim()));
- const normal=s=>s.replace(/\s+/g,' ').trim();
- if(first?.type==='tag'&&/^h[1-6]$/.test(first.name)&&normal(DomUtils.textContent(first))===normal(document.title))return document.html;
- return '<h1>'+escape(document.title)+'</h1>'+(document.html||'');
+ const normal=s=>s.replace(/\s+/g,' ').trim();const isHeading=first?.type==='tag'&&/^h[1-6]$/.test(first.name);
+ const heading=isHeading?normal(DomUtils.textContent(first)):'';const title=chapterLabel(document);
+ const numbered=document.kind==='глава'&&Number.isInteger(document.chapterNumber);
+ const matches=isHeading&&(heading===normal(document.title)||(numbered&&chapterTitle(heading)===chapterTitle(normal(document.title))));
+ if(matches){
+  if(!numbered)return document.html;
+  first.children=parseDocument(escape(title)).children;
+  return DomUtils.getOuterHTML(dom,{encodeEntities:'utf8'});
+ }
+ return '<h1>'+escape(title)+'</h1>'+(document.html||'');
 }
 export function htmlToPlain(html){
  const dom=parseDocument(html);
