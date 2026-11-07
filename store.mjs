@@ -34,6 +34,28 @@ export class Store {
  persist(){const tmp=path.join(this.current,'database.sqlite.tmp');const fd=fs.openSync(tmp,'w');try{fs.writeFileSync(fd,this.db.export());fs.fsyncSync(fd)}finally{fs.closeSync(fd)}fs.renameSync(tmp,path.join(this.current,'database.sqlite'))}
  transaction(fn){const before=this.db.export();try{this.db.run('BEGIN');const result=fn();this.db.run('COMMIT');this.persist();return result}catch(error){this.db.close();this.db=new SQL.Database(before);throw error}}
  list(){return this.rows('SELECT id,title,kind,status,position,updated,revision,length(plain) AS characters FROM documents WHERE deleted_at IS NULL ORDER BY position')}
+ projectState(){
+  const settings=this.rows("SELECT key,value FROM settings WHERE key IN ('bookTitle','projectId') ORDER BY key");
+  const documents=this.rows('SELECT id,revision,position,deleted_at FROM documents ORDER BY id');
+  const versions=this.rows('SELECT id,document_id,created FROM versions ORDER BY id');
+  const title=settings.find(s=>s.key==='bookTitle')?.value||'';
+  return {title,exists:Boolean(title||documents.length||versions.length||settings.some(s=>s.key==='projectId')),fingerprint:crypto.createHash('sha256').update(JSON.stringify({settings,documents,versions})).digest('hex')};
+ }
+ createProject(title,{expectedFingerprint,confirmReplace=false}={}){
+  if(typeof title!=='string'||!title.trim()||title.trim().length>200)throw Object.assign(Error('Укажите название проекта от 1 до 200 символов'),{status:400});
+  const current=this.projectState();
+  if(expectedFingerprint!==current.fingerprint)throw Object.assign(Error('Текущий проект изменился в другой вкладке. Проверьте данные и подтвердите создание нового проекта ещё раз.'),{status:409});
+  if(current.exists&&confirmReplace!==true)throw Object.assign(Error('Подтвердите замену текущего проекта. Перед заменой будет создана резервная копия.'),{status:400});
+  const previousDocumentIds=this.rows('SELECT id FROM documents').map(d=>d.id);
+  const temporary=fs.mkdtempSync(path.join(this.root,'new-project-'));let empty;
+  try{
+   empty=new Store(temporary,{now:this.now});
+   empty.transaction(()=>{empty.db.run('INSERT INTO settings(key,value) VALUES (?,?)',['bookTitle',title.trim()]);empty.db.run('INSERT INTO settings(key,value) VALUES (?,?)',['projectId',crypto.randomUUID()])});
+   const archive=empty.archive();empty.close();empty=null;
+   const backup=this.restore(archive);
+   return {backup,previousDocumentIds};
+  }finally{empty?.close();fs.rmSync(temporary,{recursive:true,force:true})}
+ }
  trash(){return this.rows('SELECT id,title,kind,status,position,updated,revision,deleted_at,length(plain) AS characters FROM documents WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC,id')}
  trashMaterial(id,revision){
   const d=this.get(id);if(!d)throw Object.assign(Error('Материал не найден или уже находится в корзине'),{status:404});

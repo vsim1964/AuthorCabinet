@@ -1,9 +1,1 @@
-{
-  "private": true,
-  "dependencies": {
-    "sql.js": "1.14.1",
-    "mammoth": "1.11.0",
-    "fflate": "0.8.2",
-    "sanitize-html": "2.17.4"
-  }
-}
+{"private":true,"dependencies":{"docx":"9.15.3","fflate":"0.8.2","htmlparser2":"10.1.0","mammoth":"1.11.0","sanitize-html":"2.17.4","sql.js":"1.14.1"}}
