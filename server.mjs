@@ -6,12 +6,13 @@ import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import mammoth from 'mammoth';
 import sanitizeHtml from 'sanitize-html';
+import {materialId} from './material-links.mjs';
 import {zipSync} from 'fflate';
 import {Store} from './store.mjs';
 import {selectDocuments,exportPublication} from './publication.mjs';
 import {numberChapters,chapterLabel} from './composition.mjs';
 const here=path.dirname(fileURLToPath(import.meta.url));
-export const clean=(html)=>sanitizeHtml(String(html),{allowedTags:[...sanitizeHtml.defaults.allowedTags,'img','s','u','mark','sub','sup','span','h1','h2','h3'],allowedAttributes:{'*':['style'],a:['href','name','target','rel'],img:['src','alt','width','height'],td:['colspan','rowspan'],th:['colspan','rowspan']},allowedStyles:{'*':{'color':[/^#[0-9a-f]{3,8}$/i,/^rgb\([\d\s,]+\)$/],'background-color':[/^#[0-9a-f]{3,8}$/i,/^rgb\([\d\s,]+\)$/],'text-align':[/^(left|right|center|justify)$/]}},allowedSchemes:['http','https','mailto'],transformTags:{a:(tag,attrs)=>({tagName:'a',attribs:{...attrs,target:'_blank',rel:'noopener noreferrer'}}),img:(tag,attrs)=>({tagName:'img',attribs:{...attrs,src:/^\/assets\/[a-f0-9-]+\.(png|jpg|jpeg|gif|webp)$/.test(attrs.src||'')?attrs.src:''}})}});
+export const clean=(html)=>sanitizeHtml(String(html),{allowedTags:[...sanitizeHtml.defaults.allowedTags,'img','s','u','mark','sub','sup','span','h1','h2','h3'],allowedAttributes:{'*':['style'],a:['href','name','target','rel'],img:['src','alt','width','height'],td:['colspan','rowspan'],th:['colspan','rowspan']},allowedStyles:{'*':{'color':[/^#[0-9a-f]{3,8}$/i,/^rgb\([\d\s,]+\)$/],'background-color':[/^#[0-9a-f]{3,8}$/i,/^rgb\([\d\s,]+\)$/],'text-align':[/^(left|right|center|justify)$/]}},allowedSchemes:['http','https','mailto'],transformTags:{a:(tag,attrs)=>({tagName:'a',attribs:{...attrs,target:materialId(attrs.href)?'_self':'_blank',rel:'noopener noreferrer'}}),img:(tag,attrs)=>({tagName:'img',attribs:{...attrs,src:/^\/assets\/[a-f0-9-]+\.(png|jpg|jpeg|gif|webp)$/.test(attrs.src||'')?attrs.src:''}})}});
 const textOf=html=>sanitizeHtml(html.replace(/<\/(p|h[1-6]|li|blockquote|tr)>/g,'\n'),{allowedTags:[],allowedAttributes:{}}).replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'").trim();
 const escape=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 export async function start({root=path.join(here,'data'),port=Number(process.env.PORT||4317),open=false}={}){
