@@ -10,7 +10,8 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "start": "node server.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "restart": "cmd.exe /c RESTART.bat"
   },
   "dependencies": {
     "@tiptap/extension-color": "3.32.2",
