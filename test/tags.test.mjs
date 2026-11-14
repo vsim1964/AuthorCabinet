@@ -19,5 +19,5 @@ test('Tags survive saves, restart, trash and backup; old clients do not erase th
 });
 test('Schema 3 migration backs up old database and keeps material text and versions',()=>{
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'author-tags-old-'));let s=new Store(root);
- try{const d=s.create({title:'Старая глава',html:'<p>Текст</p>',plain:'Текст'});s.version(d.id,'Авторская');s.db.run('ALTER TABLE documents DROP COLUMN tags; PRAGMA user_version=3');s.persist();s.close();s=new Store(root);assert.deepEqual(s.get(d.id).tags,[]);assert.equal(s.get(d.id).plain,'Текст');assert.equal(s.versions(d.id).length,1);assert.equal(s.db.exec('PRAGMA user_version')[0].values[0][0],4);assert.ok(fs.readdirSync(s.backups).length)}finally{s.close();fs.rmSync(root,{recursive:true,force:true})}
+ try{const d=s.create({title:'Старая глава',html:'<p>Текст</p>',plain:'Текст'});s.version(d.id,'Авторская');s.db.run('ALTER TABLE documents DROP COLUMN tags; PRAGMA user_version=3');s.persist();s.close();s=new Store(root);assert.deepEqual(s.get(d.id).tags,[]);assert.equal(s.get(d.id).plain,'Текст');assert.equal(s.versions(d.id).length,1);assert.equal(s.db.exec('PRAGMA user_version')[0].values[0][0],5);assert.ok(fs.readdirSync(s.backups).length)}finally{s.close();fs.rmSync(root,{recursive:true,force:true})}
 });
