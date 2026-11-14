@@ -14,8 +14,18 @@ import DOMPurify from 'dompurify';
 import {materialHref,materialId} from '../material-links.mjs';
 export const clean=html=>DOMPurify.sanitize(html);
 export function RichView({html}){return <div className="rich-body" dangerouslySetInnerHTML={{__html:clean(html||'')}}/>}
-export default function Editor({html,onChange,onError,materials=[],onOpenMaterial}){
+export default function Editor({html,onChange,onError,materials=[],onOpenMaterial,position,onRememberPosition}){
  const file=useRef(null);const toolbar=useRef(null);const [link,setLink]=useState(null);const [linkSearch,setLinkSearch]=useState('');const editor=useEditor({shouldRerenderOnTransaction:true,extensions:[StarterKit.configure({link:{openOnClick:false,HTMLAttributes:{rel:'noopener noreferrer'}}}),TextStyle,Color,Highlight.configure({multicolor:true}),Image,Table.configure({resizable:true}),TableRow,TableCell,TableHeader,Subscript,Superscript,TextAlign.configure({types:['heading','paragraph']})],content:clean(html||''),onUpdate:({editor})=>onChange(editor.getHTML(),editor.getText())});
+ const remember=useRef(onRememberPosition);remember.current=onRememberPosition;
+ useEffect(()=>{
+  if(!editor)return;
+  if(position){const max=editor.state.doc.content.size;editor.commands.setTextSelection({from:Math.max(1,Math.min(position.from||1,max)),to:Math.max(1,Math.min(position.to||1,max))})}
+  let timer;let last={from:editor.state.selection.from,to:editor.state.selection.to,scrollY:position?.scrollY||window.scrollY};
+  const capture=()=>{if(!editor.isDestroyed){const {from,to}=editor.state.selection;last={from,to,scrollY:window.scrollY}}};
+  const changed=()=>{capture();clearTimeout(timer);timer=setTimeout(()=>remember.current?.(last),250)};
+  const frame=requestAnimationFrame(()=>{if(position)window.scrollTo({top:position.scrollY||0,left:0,behavior:'instant'});capture();editor.on('selectionUpdate',changed);window.addEventListener('scroll',changed,{passive:true})});
+  return()=>{cancelAnimationFrame(frame);clearTimeout(timer);editor.off('selectionUpdate',changed);window.removeEventListener('scroll',changed);capture();remember.current?.(last)};
+ },[editor]);
  useEffect(()=>{
   const element=toolbar.current;if(!editor||!element)return;
   let measured=0;
